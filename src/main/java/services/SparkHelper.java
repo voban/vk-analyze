@@ -1,9 +1,9 @@
+package services;
+
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.storage.StorageLevel;
 import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -25,52 +25,47 @@ public class SparkHelper {
         * затем выделяю из всей указанной информации лишь необходимую,
         * например, о школах.
          */
-        JavaPairRDD<String, Map<String, Object>> rddUsers = users.filter(s -> {
-            ObjectMapper mapper = new ObjectMapper();
-            Map map = mapper.readValue(s.substring(s.indexOf("{")), Map.class);
-            return map.get(task.getName()) != null;
-        }).flatMapToPair(s -> {
-            ObjectMapper mapper = new ObjectMapper();
-            String vkId = s.substring(0, s.indexOf("{")).trim();
-            Map user = mapper.readValue(s.substring(s.indexOf("{")), Map.class);
-            List<Map<String, Object>> data = (ArrayList<Map<String, Object>>) user.get(task.getName());
-            int bdate = 0;
-            if (user.get("bdate") != null) {
-                SimpleDateFormat format = new SimpleDateFormat("d.M.yyyy");
-                try {
-                    Date date = format.parse((String) user.get("bdate"));
-                    GregorianCalendar cal = new GregorianCalendar();
-                    cal.setTime(date);
-                    bdate = cal.get(GregorianCalendar.YEAR);
-                } catch (Exception e) {
-                }
-            }
-            List<Tuple2<String, Map<String, Object>>> list = new ArrayList<>();
-            for (Map<String, Object> map : data) {
-                map.put("bdate", bdate);
-                list.add(new Tuple2<>(vkId, map));
-            }
-            return list;
-        });
+        JavaPairRDD<String, Map<String, Object>> rddUsers = users
+                .flatMapToPair(s -> {
+                    ObjectMapper mapper = new ObjectMapper();
+                    String[] st = s.split("\\t");
+                    Map user = mapper.readValue(st[1].trim(), Map.class);
+                    List<Tuple2<String, Map<String, Object>>> list = new ArrayList<>();
+                    if (user.get(task.getName()) != null) {
+                        String vkId = st[0].trim();
+                        List<Map<String, Object>> data = (List<Map<String, Object>>) user.get(task.getName());
+                        int bdate = 0;
+                        if (user.get("bdate") != null) {
+                            SimpleDateFormat format = new SimpleDateFormat("d.M.yyyy");
+                            try {
+                                Date date = format.parse((String) user.get("bdate"));
+                                GregorianCalendar cal = new GregorianCalendar();
+                                cal.setTime(date);
+                                bdate = cal.get(GregorianCalendar.YEAR);
+                            } catch (Exception e) {
+                            }
+                        }
+                        for (Map<String, Object> map : data) {
+                            map.put("bdate", bdate);
+                            list.add(new Tuple2<>(vkId, map));
+                        }
+                    }
+                    return list;
+                });
 
         /*
         * Оставляю только уникальные связи типа "Друг".
          */
-        JavaRDD<String> rddConnections = connections
-                .map(s -> {
-                    String[] line = s.split("\t");
-                    return new Tuple3<>(line[0], line[1], line[2]);
-                })
-                .distinct()
-                .map(t -> t._1() + "\t" + t._2() + "\t" + t._3());
+        JavaRDD<String> rddConnections = connections.distinct();
 
         JavaPairRDD<String, String> rddFriendsConnections = rddConnections
-                .map(s -> {
+                .flatMapToPair(s -> {
+                    List<Tuple2<String, String>> list = new ArrayList<>();
                     String[] line = s.split("\t");
-                    return new Tuple3<>(line[0], line[1], line[2]);
-                })
-                .filter(t -> ((t._1().compareTo(t._2()) < 0) && t._3().equals("0")))
-                .mapToPair(t -> new Tuple2<>(t._1(), t._2()));
+                    if ((line[0].compareTo(line[1]) < 0) && (line[2].equals("0")))
+                        list.add(new Tuple2<>(line[0], line[1]));
+                    return list;
+                });
 
         /*
         * Создаю единую базу данных.
@@ -133,13 +128,15 @@ public class SparkHelper {
     * Если равны года рождения, либо год начала или конца обучения, то сильная связь; иначе - слабая
      */
     public static void equalsSchools(Map mapFrom, Map mapTo, List list, Tuple4 t) {
+        if ((mapFrom.get("id") == null) || (mapTo.get("id") == null))
+            return;
         if ((mapFrom.get("id")).equals(mapTo.get("id"))) {
             Integer bdateFrom = (Integer) mapFrom.get("bdate");
             Integer bdateTo = (Integer) mapTo.get("bdate");
-            Integer yearStartFrom = (Integer) mapFrom.get("year_from");
-            Integer yearStartTo = (Integer) mapTo.get("year_from");
-            Integer yearEndFrom = (Integer) mapFrom.get("year_to");
-            Integer yearEndTo = (Integer) mapTo.get("year_to");
+            Integer yearStartFrom = mapFrom.get("year_from") != null ? (Integer) mapFrom.get("year_from") : 0;
+            Integer yearStartTo = mapTo.get("year_from") != null ? (Integer) mapTo.get("year_from") : 0;
+            Integer yearEndFrom = mapFrom.get("year_to") != null ? (Integer) mapFrom.get("year_to") : 0;
+            Integer yearEndTo = mapTo.get("year_to") != null ? (Integer) mapTo.get("year_to") : 0;
             if (((bdateFrom != 0) && (bdateTo != 0) && (Math.abs(bdateFrom - bdateTo) < 2))
                     || ((yearStartFrom != 0) && (yearStartTo != 0) && (yearStartFrom.equals(yearStartTo)))
                     || ((yearEndFrom != 0) && (yearEndTo != 0) && (yearEndFrom.equals(yearEndTo)))) {
@@ -158,11 +155,13 @@ public class SparkHelper {
     * Если примерно совпадает год рождения или год выпуска, то слабая связь.
      */
     public static void equalsUniversities(Map mapFrom, Map mapTo, List list, Tuple4 t) {
+        if ((mapFrom.get("id") == null) || (mapTo.get("id") == null))
+            return;
         if ((mapFrom.get("id")).equals(mapTo.get("id"))) {
             Integer bdateFrom = (Integer) mapFrom.get("bdate");
             Integer bdateTo = (Integer) mapTo.get("bdate");
-            Integer yearGraduateFrom = (Integer) mapFrom.get("graduation");
-            Integer yearGraduateTo = (Integer) mapTo.get("graduation");
+            Integer yearGraduateFrom = mapFrom.get("graduation") != null ? (Integer) mapFrom.get("graduation") : 0;
+            Integer yearGraduateTo = mapTo.get("graduation") != null ? (Integer) mapTo.get("graduation") : 0;
             if (((bdateFrom != 0) && (bdateTo != 0) && (Math.abs(bdateFrom - bdateTo) < 2))
                     || ((yearGraduateFrom != 0) && (yearGraduateTo != 0) && (Math.abs(yearGraduateFrom - yearGraduateTo) < 2)))
                 if ((((bdateFrom != 0) && (bdateFrom.equals(bdateTo)))
@@ -182,13 +181,15 @@ public class SparkHelper {
     * Либо одинаковый год рождения, либо год начала или конца службы
      */
     public static void equalsMilitary(Map mapFrom, Map mapTo, List list, Tuple4 t) {
+        if ((mapFrom.get("unit_id") == null) || (mapTo.get("unit_id") == null))
+            return;
         if ((mapFrom.get("unit_id")).equals(mapTo.get("unit_id"))) {
             Integer bdateFrom = (Integer) mapFrom.get("bdate");
             Integer bdateTo = (Integer) mapTo.get("bdate");
-            Integer yearStartFrom = (Integer) mapFrom.get("from");
-            Integer yearStartTo = (Integer) mapTo.get("from");
-            Integer yearEndFrom = (Integer) mapFrom.get("until");
-            Integer yearEndTo = (Integer) mapTo.get("until");
+            Integer yearStartFrom = mapFrom.get("from") != null ? (Integer) mapFrom.get("from") : 0;
+            Integer yearStartTo = mapTo.get("from") != null ? (Integer) mapTo.get("from") : 0;
+            Integer yearEndFrom = mapFrom.get("until") != null ? (Integer) mapFrom.get("until") : 0;
+            Integer yearEndTo = mapTo.get("until") != null ? (Integer) mapTo.get("until") : 0;
             if (((bdateFrom != 0) && (bdateTo != 0) && (Math.abs(bdateFrom - bdateTo) < 2))
                     || ((yearStartFrom != 0) && (yearStartTo != 0) && (yearStartFrom.equals(yearStartTo)))
                     || ((yearEndFrom != 0) && (yearEndTo != 0) && (yearEndFrom.equals(yearEndTo)))) {
@@ -210,7 +211,7 @@ public class SparkHelper {
                     ObjectMapper mapper = new ObjectMapper();
                     List<Tuple2<Integer, List<String>>> list = new ArrayList<>();
                     Map<String, Object> map = mapper.readValue(s.substring(s.indexOf("{")), Map.class);
-                    String id = (String)map.get("id_vk");
+                    String id = (String) map.get("id_vk");
                     List<HashMap<String, Object>> info = (ArrayList<HashMap<String, Object>>) map.get(field);
                     for (HashMap<String, Object> m : info) {
                         List<String> ids = new ArrayList<>();
