@@ -20,8 +20,8 @@ public class MainUniversity {
         }
         try (JavaSparkContext sc = new JavaSparkContext(conf)) {
 
-            JavaRDD<String> rddUsers = sc.textFile("C:\\Users\\Владимир\\Desktop\\vk-sample\\raw");
-            JavaRDD<String> rddConnections = sc.textFile("C:\\Users\\Владимир\\Desktop\\vk-sample\\fast-graph");
+            JavaRDD<String> rddUsers = sc.textFile("C:\\Users\\Владимир\\Desktop\\vk-sample2\\raw").coalesce(1);
+            JavaRDD<String> rddConnections = sc.textFile("C:\\Users\\Владимир\\Desktop\\vk-sample2\\fast-graph").coalesce(1);
             JavaRDD<String> csvUniversities = SparkHelper.getAdditionalConnections(rddUsers, rddConnections, Task.UNIVERSITY);
             csvUniversities.coalesce(1).saveAsTextFile("C:\\Users\\Владимир\\Desktop\\vk-sample\\results\\resUniversities");
 

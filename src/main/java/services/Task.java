@@ -6,7 +6,8 @@ package services;
 public enum Task {
     SCHOOL("schools"),
     UNIVERSITY("universities"),
-    MILITARY("military");
+    MILITARY("military"),
+    CAREER("career");
 
     private String name;
 

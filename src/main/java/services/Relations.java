@@ -9,7 +9,8 @@ public enum Relations {
     SCHOOL_BESTFRIEND(37),
     UNIVERSITY_FRIEND(25),
     UNIVERSITY_BESTFRIEND(38),
-    MILITARY_FRIEND(36);
+    MILITARY_FRIEND(36),
+    CAREER_FRIEND(27);
 
     Relations(Integer code) {
         this.code = code;

@@ -7,11 +7,12 @@ import services.SparkHelper;
 import services.Task;
 
 /**
- * Created by Владимир on 01.11.2016.
+ * Created by Владимир on 03.11.2016.
  */
-public class MainMilitary {
+public class MainCareer {
 
     public static void main(String[] args) throws Exception {
+
         System.setProperty("hadoop.home.dir", "C:\\Users\\Владимир\\Desktop\\Java\\winutils");
         SparkConf conf = new SparkConf();
         conf.setAppName("VK-Analyze");
@@ -22,8 +23,8 @@ public class MainMilitary {
 
             JavaRDD<String> rddUsers = sc.textFile("C:\\Users\\Владимир\\Desktop\\vk-sample2\\raw").coalesce(1);
             JavaRDD<String> rddConnections = sc.textFile("C:\\Users\\Владимир\\Desktop\\vk-sample2\\fast-graph").coalesce(1);
-            JavaRDD<String> csvMilitary = SparkHelper.getAdditionalConnections(rddUsers, rddConnections, Task.MILITARY);
-            csvMilitary.coalesce(1).saveAsTextFile("C:\\Users\\Владимир\\Desktop\\vk-sample\\results\\resMilitary");
+            JavaRDD<String> csvCareer = SparkHelper.getAdditionalConnections(rddUsers, rddConnections, Task.CAREER);
+            csvCareer.coalesce(1).saveAsTextFile("C:\\Users\\Владимир\\Desktop\\vk-sample\\results\\resCareer");
 
         } catch (Exception e) {
             e.printStackTrace();
